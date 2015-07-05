@@ -2,70 +2,61 @@
 #include <RCSwitch.h> // https://code.google.com/p/rc-switch/
 #include <PinChangeInt.h>
 
-RCSwitch mySwitch = RCSwitch(); 
-ISR(WDT_vect) { Sleepy::watchdogEvent(); } // Setup for low power waiting
+RCSwitch rf = RCSwitch();
+ISR(WDT_vect) {Sleepy::watchdogEvent();}  // Setup for low power waiting
 
-
-int calibrationTime = 20;        //the time we give the sensor to calibrate (10-60 secs according to the datasheet)
-long unsigned int lowIn;         //the time when the sensor outputs a low impulse
-long unsigned int pause = 5000;  //the amount of milliseconds the sensor has to be low before we assume all motion has stopped
-
-boolean lockLow = true;
-boolean takeLowTime;  
-boolean pirUp;  
+int calibrationTime = 10;        //the time we give the sensor to calibrate (10-60 secs according to the datasheet)
+int rfPacketsToSend = 10; 
 
 // Pins
-int PIR = 2; 
-//int LED = 13;
-int RFTX = 10;   // Transmitter is connected to Arduino Pin #10  
+int PIR = 2;
+int LED = 13;
+int RFTX = 10;   // Transmitter is connected to Arduino Pin #10
 
 int rfAlertCode = 666; // code send when motion detected
 
-void setup(){
+void setup() {
   Serial.begin(9600);
   pinMode(PIR, INPUT);
-  //pinMode(LED, OUTPUT);
-  //pinMode(BEEP, OUTPUT);
-  mySwitch.enableTransmit(RFTX);
+  pinMode(LED, OUTPUT);
+  rf.enableTransmit(RFTX);
 
-  //digitalWrite(LED, LOW);
-  CalibratePirSensor();  //give the sensor some time to calibrate
-  
   PRR = bit(PRTIM1);                           // only keep timer 0 going
   ADCSRA &= ~ bit(ADEN); bitSet(PRR, PRADC);   // Disable the ADC to save power
   PCintPort::attachInterrupt(PIR, wakeUp, CHANGE);
-}
-
-void wakeUp(){
-}
-
-void loop(){
-  if (digitalRead(PIR) == HIGH) {
-    Msg("Motion detected");
-    mySwitch.send(rfAlertCode, 24);
-    //digitalWrite(LED, HIGH);
-  }
   
+  CalibratePirSensor();  //give the sensor some time to calibrate
+}
+
+void loop() {
+  if (digitalRead(PIR) == HIGH) {
+    Serial.println("Motion detected");
+    for (int i = 0; i < rfPacketsToSend; i++)
+    {
+      Serial.print(".");
+      rf.send(rfAlertCode, 24);
+    }
+    Serial.println("");
+    delay(100);
+  }
   Sleepy::powerDown();
 }
-  
-void Msg(String msg)
-{
-    Serial.print("[");
-    Serial.print((millis()/1000));
-    Serial.print("] ");
-    Serial.println(msg);
-}
+
+void wakeUp() {}
 
 void CalibratePirSensor()
 {
-  Msg("Calibrating PIR sensor ");
-  for(int i = 0; i < calibrationTime; i++){
-      Serial.print(".");
-      delay(1000);
-   }
+  int ll = HIGH;
+  Serial.println("Calibrating PIR sensor ");
+  for (int i = 0; i < calibrationTime; i++) {
+    Serial.print(".");
+    delay(1000);
+    digitalWrite(LED, ll);
+    ll = ll == HIGH ? LOW : HIGH;
+  }
   Serial.println("");
-  Msg("Sensor active");
+  Serial.println("Sensor active");
+  digitalWrite(LED, LOW);
   delay(50);
 }
 
